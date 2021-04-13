@@ -1,9 +1,9 @@
 
 
 //#include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 
 #include <AccelStepper.h>
 
@@ -18,22 +18,44 @@ const char *ssid = APSSID;
 const char *password = APPSK;
 
 
+//#define ECHO 3
+//#define TRIG 21
+
+// крутая библиотека сонара
+//#include <NewPing.h>
+//NewPing sonar(TRIG, ECHO, 400);
+#include <Ultrasonic.h>
+
+Ultrasonic ultrasonic1(17, 16);
+
+float dist_3[3] = {0.0, 0.0, 0.0};   // массив для хранения трёх последних измерений
+float middle, dist, dist_filtered;
+float k;
+byte i, delta;
+unsigned long dispIsrTimer, sensTimer;
+float wall = 50.0;
 
 
-const int dirPin = D0;
-const int stepPin = D1;
-const int dirPin1 = D3;
-const int stepPin1 = D5;
+int Htime;       // целочисленная переменная для хранения времени высокого логического уровня
+int Ltime;       // целочисленная переменная для хранения времени низкого логического уровня
+float Ttime;     // переменная для хранения общей длительности периода
+float frequency; // переменная для хранения частоты
 
-int speed = 400;
+
+const int dirPin = 10;
+const int stepPin = 0;
+const int dirPin1 = 11;
+const int stepPin1 = 9;
+
+int speed = 1500;
 int oneMove = 200;
 bool straight = false;
 bool moving = true;
-
+bool speedChanged = false;
 AccelStepper Rstepper(1, stepPin, dirPin);
 AccelStepper Lstepper(1, stepPin1, dirPin1);
 
-ESP8266WebServer server(80);
+WebServer server(8080);
 
 #define LED 2
 int statusLED = HIGH; // Начальный статус светодиода ВЫКЛЮЧЕН. Светодиод инверсный
@@ -195,6 +217,23 @@ void handleRight() {
         }
  response();
 }
+
+
+// медианный фильтр из 3ёх значений
+float middle_of_3(float a, float b, float c) {
+  if ((a <= b) && (a <= c)) {
+    middle = (b <= c) ? b : c;
+  }
+  else {
+    if ((b <= a) && (b <= c)) {
+      middle = (a <= c) ? a : c;
+    }
+    else {
+      middle = (a <= b) ? a : b;
+    }
+  }
+  return middle;
+}
  
 void setup() {
     delay(1000); 
@@ -220,29 +259,50 @@ void setup() {
     digitalWrite(LED, statusLED);
 
 
-    Rstepper.setMaxSpeed(800);
+    Rstepper.setMaxSpeed(1000);
     Rstepper.setSpeed(speed * -1);
-    Lstepper.setMaxSpeed(800);
+    Lstepper.setMaxSpeed(1000);
     Lstepper.setSpeed(speed);
 
+    pinMode(19, OUTPUT);
+    pinMode(5, OUTPUT);
+    digitalWrite(5, LOW); //left wheel
+    digitalWrite(19, HIGH);
+
+  ledcSetup(0, 3000, 13);
+  // подключим канал к GPIO, который нужно контролировать
+  ledcAttachPin(18, 0);
 
 
 }
  
 void loop() {
-    server.handleClient();
+  //  server.handleClient();
    // Serial.println(straight);
     
-    if (moving)
-    {
-      Rstepper.runSpeed();
-      Lstepper.runSpeed();
-    }
-    
-    
+    if (moving && (dist_filtered>wall))
+      {
+      // Rstepper.runSpeed();
+      // Lstepper.runSpeed();
+      ledcWrite(0, 20);
+      }
+    else ledcWrite(0, 0);
+    //     Rstepper.runSpeed();
+   //   Lstepper.runSpeed();
 
-  
-    
+  if ((dist_filtered < (wall+50)) && !speedChanged)
+    {
+      ledcSetup(0, speed/2, 13);
+      speedChanged = true;
+    }
+  else if ((dist_filtered > (wall+50)) && speedChanged)
+  {
+    ledcSetup(0, speed, 13);
+    speedChanged = false;
+  }
+   
+  //delay(1);
+ /*   
     if (straight)
     {
       for (int i = 0; i < 180; i++)
@@ -258,11 +318,63 @@ void loop() {
       //response();
     }
     
-
+*/
 
     //Rstepper.runSpeed();
     //Lstepper.runSpeed();
+
+
+  if (millis() - sensTimer > 500) {                          // измерение и вывод каждые 50 мс
+    // счётчик от 0 до 2
+    // каждую итерацию таймера i последовательно принимает значения 0, 1, 2, и так по кругу
+    if (i > 1) i = 0;
+    else i++;
+
+    //dist_3[i] = (float)ultrasonic1.read() / 57.5;     
+    dist_3[i] = (float)ultrasonic1.read();               // получить расстояние в текущую ячейку массива
+    //if (!digitalRead(buttPIN)) dist_3[i] += case_offset;    // если включен переключатель стороны измерения, прибавить case_offset
+    dist = middle_of_3(dist_3[0], dist_3[1], dist_3[2]);    // фильтровать медианным фильтром из 3ёх последних измерений
+
+    delta = abs(dist_filtered - dist);                      // расчёт изменения с предыдущим
+    if (delta > 1) k = 0.7;                                 // если большое - резкий коэффициент
+    else k = 0.1;                                           // если маленькое - плавный коэффициент
+
+    dist_filtered = dist * k + dist_filtered * (1 - k);     // фильтр "бегущее среднее"
+
+    //disp.clear();                                           // очистить дисплей
+    //disp.float_dot(dist_filtered, 1);                       // вывести
+    sensTimer = millis();                                   // сбросить таймер
+
+    Serial.print("Lenth: ");
+    Serial.println(dist_filtered);
+    Serial.println(ultrasonic1.read());
+
+    // частотомер
+    //  Htime=pulseIn(8,HIGH);    // прочитать время высокого логического уровня
+    //  Ltime=pulseIn(8,LOW);     // прочитать время низкого логического уровня
+        
+     // Ttime = Htime+Ltime;
+    
+     // frequency=1000000/Ttime;  // получение частоты из Ttime в микросекундах
+
+      //Serial.print("Frequency: ");
+     // Serial.println(frequency);
+     // Serial.println(Htime);
+     // Serial.println(Ltime);
+    
+  }
+
+  //if (micros() - dispIsrTimer > 300) {       // таймер динамической индикации (по-русски: КОСТЫЛЬ!)
+    //disp.timerIsr();                         // "пнуть" дисплей
+  //  dispIsrTimer = micros();                 // сбросить таймер
+  //}
+
+  
 }
+
+
+
+
 
 
 
