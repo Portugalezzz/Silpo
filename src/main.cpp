@@ -1,18 +1,46 @@
 
 
-//#include <Arduino.h>
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
-
+#include <IRremoteESP8266.h>
+//#include <IRsend.h>
 #include <AccelStepper.h>
+#include <Ultrasonic.h>
 
-
+#include <IRrecv.h>
+#include <IRutils.h>
+#include <IRsend.h>
 
 #ifndef APSSID
 #define APSSID "ESP_Car"
 #define APPSK  "123456789"
 #endif
+
+
+
+const uint16_t kRecvPin = 4;
+
+IRrecv irrecv(kRecvPin);
+
+decode_results results;
+
+#define IR_LED 14  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
+
+IRsend irsend(IR_LED);  // Set the GPIO to be used to sending the message.
+
+
+
+uint16_t Samsung_power_toggle[71] = {
+    38000, 1,  1,  170, 170, 20, 63, 20, 63, 20, 63,  20, 20, 20, 20,
+    20,    20, 20, 20,  20,  20, 20, 63, 20, 63, 20,  63, 20, 20, 20,
+    20,    20, 20, 20,  20,  20, 20, 20, 20, 20, 63,  20, 20, 20, 20,
+    20,    20, 20, 20,  20,  20, 20, 20, 20, 63, 20,  20, 20, 63, 20,
+    63,    20, 63, 20,  63,  20, 63, 20, 63, 20, 1798};
+
+
+
 
 const char *ssid = APSSID;
 const char *password = APPSK;
@@ -24,7 +52,7 @@ const char *password = APPSK;
 // крутая библиотека сонара
 //#include <NewPing.h>
 //NewPing sonar(TRIG, ECHO, 400);
-#include <Ultrasonic.h>
+
 
 Ultrasonic ultrasonic1(17, 16);
 
@@ -33,7 +61,7 @@ float middle, dist, dist_filtered;
 float k;
 byte i, delta;
 unsigned long dispIsrTimer, sensTimer;
-float wall = 50.0;
+float wall = 100.0;
 
 
 int Htime;       // целочисленная переменная для хранения времени высокого логического уровня
@@ -47,7 +75,18 @@ const int stepPin = 0;
 const int dirPin1 = 11;
 const int stepPin1 = 9;
 
-int speed = 1500;
+/*
+int RECV_PIN = 4;
+IRrecv irrecv(RECV_PIN);
+decode_results results;
+
+byte SEND_PIN = 14;
+
+IRsend irsend(SEND_PIN);
+unsigned long infraRedCode = 0xE0E1488F;
+
+*/
+int speed = 500;
 int oneMove = 200;
 bool straight = false;
 bool moving = true;
@@ -272,7 +311,11 @@ void setup() {
   ledcSetup(0, 3000, 13);
   // подключим канал к GPIO, который нужно контролировать
   ledcAttachPin(18, 0);
+  
+ irrecv.enableIRIn();
+ irsend.begin();
 
+  //irrecv.enableIRIn();
 
 }
  
@@ -324,7 +367,7 @@ void loop() {
     //Lstepper.runSpeed();
 
 
-  if (millis() - sensTimer > 500) {                          // измерение и вывод каждые 50 мс
+  if (millis() - sensTimer > 1500) {                          // измерение и вывод каждые 50 мс
     // счётчик от 0 до 2
     // каждую итерацию таймера i последовательно принимает значения 0, 1, 2, и так по кругу
     if (i > 1) i = 0;
@@ -349,6 +392,33 @@ void loop() {
     Serial.println(dist_filtered);
     Serial.println(ultrasonic1.read());
 
+
+    irsend.sendGC(Samsung_power_toggle, 71);
+
+      if (irrecv.decode(&results)) 
+      {
+    // print() & println() can't handle printing long longs. (uint64_t)
+    serialPrintUint64(results.value);
+    if(results.value ==  3772793023) 
+    {
+      Serial.println("IR OK");
+    }
+    Serial.println("");
+    irrecv.resume();  // Receive the next value
+      }
+/*
+    irsend.sendNEC(infraRedCode, 32);
+
+
+      if (irrecv.decode(&results)) 
+      {
+      Serial.print(results.value, HEX);
+      Serial.print(" = ");
+      Serial.println(results.value, DEC);
+      irrecv.resume();
+      }
+
+      */
     // частотомер
     //  Htime=pulseIn(8,HIGH);    // прочитать время высокого логического уровня
     //  Ltime=pulseIn(8,LOW);     // прочитать время низкого логического уровня
