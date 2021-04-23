@@ -53,7 +53,8 @@ float middle, dist, dist_filtered;
 float k;
 byte i, delta;
 unsigned long dispIsrTimer, sensTimer;
-float wall = 100.0;
+unsigned long strob;
+float wall = 300.0;
 
 
 int Htime;       // целочисленная переменная для хранения времени высокого логического уровня
@@ -78,8 +79,8 @@ IRsend irsend(SEND_PIN);
 unsigned long infraRedCode = 0xE0E1488F;
 
 */
-double speed = 500;
-double lowSpeed = 250;
+double speed = 2000;
+double lowSpeed = 1500;
 int oneMove = 200;
 bool straight = false;
 bool moving = true;
@@ -311,13 +312,11 @@ void setup()
 
 
  //Generator
-  ledcSetup(0, 3000, 13);
+  ledcSetup(0, speed, 13);
   ledcAttachPin(18, 0);
   
  irrecv.enableIRIn();
  irsend.begin();
-
-//irrecv.enableIRIn();
 
 }
  
@@ -325,20 +324,22 @@ void loop()
 {
   // server.handleClient();
   // Serial.println(straight);
+  //ledcWrite(0, 20);
+//}
     
-  if ((dist_filtered>wall))
+  if (!IRCheck)
   {
 
     ledcWrite(0, 20);
     //Serial.println("Moving");
   }
-  else if((dist_filtered<wall) && IRCheck) 
+  else if(dist_filtered<wall) 
   {
     ledcWrite(0, 0);
     //Serial.println("Stop");
 
   }
-
+/*
   if ((dist_filtered < (wall+50)) && !speedChanged && IRCheck)
   {
     ledcSetup(0, lowSpeed, 13);
@@ -347,14 +348,14 @@ void loop()
     
   }
   
-  else if ((dist_filtered > (wall+50)) && speedChanged)
+  else if (((dist_filtered > (wall+50)) && speedChanged) || !IRCheck)
   {
     ledcSetup(0, speed, 13);
     speedChanged = false;
-    Serial.println("Normal Speed");
+    //Serial.println("Normal Speed");
   }
    
-
+*/
 
   if (millis() - sensTimer > 1000) 
   {                          // измерение и вывод каждые 50 мс
@@ -377,11 +378,11 @@ void loop()
     
     sensTimer = millis();                                   
 
-    //Serial.print("Lenth: ");
-    //Serial.println(dist_filtered);
+    Serial.print("Lenth: ");
+    Serial.println(dist_filtered);
 
 
-    irsend.sendGC(Samsung_power_toggle, 71);
+    
 
     if (irrecv.decode(&results)) 
     {
@@ -393,7 +394,13 @@ void loop()
         IRCheck = true;
         results.value = 0;
       }
-
+      else 
+      {
+        IRCheck = false;
+        Serial.println("IR NO");
+        results.value = 0;
+      
+      }
           
       irrecv.resume(); 
     }
@@ -407,8 +414,15 @@ void loop()
     irrecv.resume(); 
  
   }
+  if (millis() - strob > 2000) 
+  {
+      irsend.sendGC(Samsung_power_toggle, 71);
+      strob = millis();
+  }
+
 
 }
+
 /*
     irsend.sendNEC(infraRedCode, 32);
 
