@@ -46,14 +46,6 @@ const char *ssid = APSSID;
 const char *password = APPSK;
 
 
-//#define ECHO 3
-//#define TRIG 21
-
-// крутая библиотека сонара
-//#include <NewPing.h>
-//NewPing sonar(TRIG, ECHO, 400);
-
-
 Ultrasonic ultrasonic1(17, 16);
 
 float dist_3[3] = {0.0, 0.0, 0.0};   // массив для хранения трёх последних измерений
@@ -70,10 +62,10 @@ float Ttime;     // переменная для хранения общей дл
 float frequency; // переменная для хранения частоты
 
 
-const int dirPin = 10;
-const int stepPin = 0;
-const int dirPin1 = 11;
-const int stepPin1 = 9;
+//const int dirPin = 10;
+//const int stepPin = 0;
+//const int dirPin1 = 11;
+//const int stepPin1 = 9;
 
 /*
 int RECV_PIN = 4;
@@ -86,15 +78,18 @@ IRsend irsend(SEND_PIN);
 unsigned long infraRedCode = 0xE0E1488F;
 
 */
-int speed = 500;
+double speed = 500;
+double lowSpeed = 250;
 int oneMove = 200;
 bool straight = false;
 bool moving = true;
-bool speedChanged = false;
-AccelStepper Rstepper(1, stepPin, dirPin);
-AccelStepper Lstepper(1, stepPin1, dirPin1);
 
-WebServer server(8080);
+bool speedChanged = false;
+bool IRCheck = false;
+//AccelStepper Rstepper(1, stepPin, dirPin);
+//AccelStepper Lstepper(1, stepPin1, dirPin1);
+
+WebServer server(80);
 
 #define LED 2
 int statusLED = HIGH; // Начальный статус светодиода ВЫКЛЮЧЕН. Светодиод инверсный
@@ -119,28 +114,33 @@ const String HtmlButtons =
 
 const String HtmlHtmlClose = "</html>";
 
-void response(){
+void response()
+{
   String htmlRes = HtmlHtml + HtmlTitle;
-  if(statusLED == LOW){
-  htmlRes += HtmlIRStateLOW;
+  if(statusLED == LOW)
+  {
+    htmlRes += HtmlIRStateLOW;
   }
-  else{
-  htmlRes += HtmlIRStateHigh;
+  else
+  {
+    htmlRes += HtmlIRStateHigh;
   }
  
   htmlRes += HtmlButtons;
- htmlRes += HtmlHtmlClose; 
+  htmlRes += HtmlHtmlClose; 
   server.send(200, "text/html", htmlRes);
 }
 
-void handleLedOn() {
+void handleLedOn() 
+{
   statusLED = HIGH; // conditions to make the LED turn on
   digitalWrite(LED, statusLED);
   Serial.println("Светодиод >Выключен");
  response();
 }
 
-void handleLedOff() {
+void handleLedOff() 
+{
   statusLED = LOW; // conditions to make the LED turn off
   digitalWrite(LED, statusLED);
  Serial.println("Светодиод Включен");
@@ -148,83 +148,81 @@ void handleLedOff() {
 }
 
 
-void handleStraight() {
-      Serial.println("Вперед");
-      Lstepper.setSpeed(400);
-      Rstepper.setSpeed(-400);
-      for (int i = 0; i < oneMove; i++)
-        {
-        //  Serial.print("И равно ");
-        //  Serial.println(i);
-          Rstepper.runSpeed();
-          Lstepper.runSpeed();
-          delay(1);
-        }
-     // Lstepper.targetPosition();
-     // Rstepper.targetPosition();    
-      //Lstepper.move(100);
-      //Rstepper.move(-100);
+void handleStraight() 
+{
+  Serial.println("Вперед");
+  //Lstepper.setSpeed(400);
+  //Rstepper.setSpeed(-400);
+  for (int i = 0; i < oneMove; i++)
+  {
+  //  Serial.print("И равно ");
+  //  Serial.println(i);
+    //Rstepper.runSpeed();
+    //Lstepper.runSpeed();
+    delay(1);
+  }
+
+  response();
+}
+
+void handleBack() 
+{
+  //Lstepper.setSpeed(speed*-1);
+  //Rstepper.setSpeed(speed);
+  for (int i = 0; i < oneMove; i++)
+    {
+    //  Serial.print("И равно ");
+    //  Serial.println(i);
       //Rstepper.runSpeed();
       //Lstepper.runSpeed();
-      //straight = true;
-      //Serial.println(straight);
-
-
-      response();
+      delay(1);
+    }
+  response();
 }
 
-void handleBack() {
-    Lstepper.setSpeed(speed*-1);
-    Rstepper.setSpeed(speed);
-    for (int i = 0; i < oneMove; i++)
-      {
-      //  Serial.print("И равно ");
-      //  Serial.println(i);
-        Rstepper.runSpeed();
-        Lstepper.runSpeed();
-        delay(1);
-      }
+void handleLeft() 
+{
+  //Lstepper.setSpeed(speed);
+  //Rstepper.setSpeed(speed);
+  for (int i = 0; i < oneMove; i++)
+    {
+    //  Serial.print("И равно ");
+    //  Serial.println(i);
+      //Rstepper.runSpeed();
+      //Lstepper.runSpeed();
+      delay(1);
+    }
  response();
 }
 
-void handleLeft() {
-      Lstepper.setSpeed(speed);
-      Rstepper.setSpeed(speed);
-      for (int i = 0; i < oneMove; i++)
-        {
-        //  Serial.print("И равно ");
-        //  Serial.println(i);
-          Rstepper.runSpeed();
-          Lstepper.runSpeed();
-          delay(1);
-        }
- response();
+void handleStop() 
+{
+    //Lstepper.setSpeed(400);
+    //Rstepper.setSpeed(-400);
+  //Rstepper.stop ();
+  //Lstepper.stop ();
+  moving = false;
+  response();
 }
 
-void handleStop() {
-      //Lstepper.setSpeed(400);
-      //Rstepper.setSpeed(-400);
-    Rstepper.stop ();
-    Lstepper.stop ();
-    moving = false;
- response();
-}
-
-void handlemove() {
-  Lstepper.setSpeed(speed);
-  Rstepper.setSpeed(speed*-1);
-  moving = true;
- response();
-}
-
-void handleReverse() {
-  Lstepper.setSpeed(speed * -1);
-  Rstepper.setSpeed(speed);
+void handlemove() 
+{
+  //Lstepper.setSpeed(speed);
+  //Rstepper.setSpeed(speed*-1);
   moving = true;
   response();
 }
 
-void handleFaster() {
+void handleReverse() 
+{
+  //Lstepper.setSpeed(speed * -1);
+  //Rstepper.setSpeed(speed);
+  moving = true;
+  response();
+}
+
+void handleFaster() 
+{
   if (speed < 800)
   {
     speed += 50; 
@@ -235,7 +233,8 @@ void handleFaster() {
 }
 
 
-void handleSlower() {
+void handleSlower() 
+{
   if (speed > 0)
   {
     speed -= 50; 
@@ -243,17 +242,18 @@ void handleSlower() {
   response();
 }
 
-void handleRight() {
-      Lstepper.setSpeed(-400);
-      Rstepper.setSpeed(-400);
-      for (int i = 0; i < oneMove; i++)
-        {
-        //  Serial.print("И равно ");
-        //  Serial.println(i);
-          Rstepper.runSpeed();
-          Lstepper.runSpeed();
-          delay(1);
-        }
+void handleRight() 
+{
+  //Lstepper.setSpeed(-400);
+  //Rstepper.setSpeed(-400);
+  for (int i = 0; i < oneMove; i++)
+    {
+    //  Serial.print("И равно ");
+    //  Serial.println(i);
+      //Rstepper.runSpeed();
+      //Lstepper.runSpeed();
+      delay(1);
+    }
  response();
 }
 
@@ -274,100 +274,90 @@ float middle_of_3(float a, float b, float c) {
   return middle;
 }
  
-void setup() {
-    delay(1000); 
-    WiFi.softAP(ssid, password); 
-    IPAddress apip = WiFi.softAPIP();     
-    server.on("/", response); 
-    server.on("/LEDOff", handleLedOn);
-    server.on("/LEDOn", handleLedOff); 
+void setup() 
+{
+  delay(1000); 
+  WiFi.softAP(ssid, password); 
+  IPAddress apip = WiFi.softAPIP();     
+  server.on("/", response); 
+  server.on("/LEDOff", handleLedOn);
+  server.on("/LEDOn", handleLedOff); 
 
-    server.on("/Straight", handleStraight); 
-    server.on("/Left", handleLeft); 
-    server.on("/Stop", handleStop); 
-    server.on("/Right", handleRight); 
-    server.on("/Back", handleBack); 
-    server.on("/Move", handlemove); 
-    server.on("/Reverse", handleReverse); 
-    server.on("/Faster", handleFaster); 
-    server.on("/Slower", handleSlower); 
+  server.on("/Straight", handleStraight); 
+  server.on("/Left", handleLeft); 
+  server.on("/Stop", handleStop); 
+  server.on("/Right", handleRight); 
+  server.on("/Back", handleBack); 
+  server.on("/Move", handlemove); 
+  server.on("/Reverse", handleReverse); 
+  server.on("/Faster", handleFaster); 
+  server.on("/Slower", handleSlower); 
 
-    Serial.begin(9600);
-    server.begin();    
-    pinMode(LED, OUTPUT);
-    digitalWrite(LED, statusLED);
+  Serial.begin(9600);
+  server.begin();    
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, statusLED);
 
 
-    Rstepper.setMaxSpeed(1000);
-    Rstepper.setSpeed(speed * -1);
-    Lstepper.setMaxSpeed(1000);
-    Lstepper.setSpeed(speed);
+  //Rstepper.setMaxSpeed(1000);
+  //Rstepper.setSpeed(speed * -1);
+  //Lstepper.setMaxSpeed(1000);
+  //Lstepper.setSpeed(speed);
 
-    pinMode(19, OUTPUT);
-    pinMode(5, OUTPUT);
-    digitalWrite(5, LOW); //left wheel
-    digitalWrite(19, HIGH);
+  pinMode(19, OUTPUT);
+  pinMode(5, OUTPUT);
+  digitalWrite(5, LOW); //left wheel
+  digitalWrite(19, HIGH);
 
+
+ //Generator
   ledcSetup(0, 3000, 13);
-  // подключим канал к GPIO, который нужно контролировать
   ledcAttachPin(18, 0);
   
  irrecv.enableIRIn();
  irsend.begin();
 
-  //irrecv.enableIRIn();
+//irrecv.enableIRIn();
 
 }
  
-void loop() {
-  //  server.handleClient();
-   // Serial.println(straight);
+void loop() 
+{
+  // server.handleClient();
+  // Serial.println(straight);
     
-    if (moving && (dist_filtered>wall))
-      {
-      // Rstepper.runSpeed();
-      // Lstepper.runSpeed();
-      ledcWrite(0, 20);
-      }
-    else ledcWrite(0, 0);
-    //     Rstepper.runSpeed();
-   //   Lstepper.runSpeed();
+  if ((dist_filtered>wall))
+  {
 
-  if ((dist_filtered < (wall+50)) && !speedChanged)
-    {
-      ledcSetup(0, speed/2, 13);
-      speedChanged = true;
-    }
+    ledcWrite(0, 20);
+    //Serial.println("Moving");
+  }
+  else if((dist_filtered<wall) && IRCheck) 
+  {
+    ledcWrite(0, 0);
+    //Serial.println("Stop");
+
+  }
+
+  if ((dist_filtered < (wall+50)) && !speedChanged && IRCheck)
+  {
+    ledcSetup(0, lowSpeed, 13);
+    speedChanged = true;
+    Serial.print("Low Speed");
+    
+  }
+  
   else if ((dist_filtered > (wall+50)) && speedChanged)
   {
     ledcSetup(0, speed, 13);
     speedChanged = false;
+    Serial.println("Normal Speed");
   }
    
-  //delay(1);
- /*   
-    if (straight)
-    {
-      for (int i = 0; i < 180; i++)
-        {
-        //  Serial.print("И равно ");
-        //  Serial.println(i);
-          Rstepper.runSpeed();
-          Lstepper.runSpeed();
-          delay(1);
-        }
-      straight = false;
-      //Serial.println(straight);
-      //response();
-    }
-    
-*/
-
-    //Rstepper.runSpeed();
-    //Lstepper.runSpeed();
 
 
-  if (millis() - sensTimer > 1500) {                          // измерение и вывод каждые 50 мс
+  if (millis() - sensTimer > 1000) 
+  {                          // измерение и вывод каждые 50 мс
     // счётчик от 0 до 2
     // каждую итерацию таймера i последовательно принимает значения 0, 1, 2, и так по кругу
     if (i > 1) i = 0;
@@ -384,28 +374,41 @@ void loop() {
 
     dist_filtered = dist * k + dist_filtered * (1 - k);     // фильтр "бегущее среднее"
 
-    //disp.clear();                                           // очистить дисплей
-    //disp.float_dot(dist_filtered, 1);                       // вывести
-    sensTimer = millis();                                   // сбросить таймер
+    
+    sensTimer = millis();                                   
 
-    Serial.print("Lenth: ");
-    Serial.println(dist_filtered);
-    Serial.println(ultrasonic1.read());
+    //Serial.print("Lenth: ");
+    //Serial.println(dist_filtered);
 
 
     irsend.sendGC(Samsung_power_toggle, 71);
 
-      if (irrecv.decode(&results)) 
-      {
-    // print() & println() can't handle printing long longs. (uint64_t)
-    serialPrintUint64(results.value);
-    if(results.value ==  3772793023) 
+    if (irrecv.decode(&results)) 
     {
-      Serial.println("IR OK");
-    }
-    Serial.println("");
-    irrecv.resume();  // Receive the next value
+    
+      serialPrintUint64(results.value);
+      if(results.value ==  3772793023) 
+      {
+        Serial.println("IR OK");
+        IRCheck = true;
+        results.value = 0;
       }
+
+          
+      irrecv.resume(); 
+    }
+    else 
+    {
+      IRCheck = false;
+      Serial.println("IR NO");
+    
+    }
+
+    irrecv.resume(); 
+ 
+  }
+
+}
 /*
     irsend.sendNEC(infraRedCode, 32);
 
@@ -432,27 +435,8 @@ void loop() {
      // Serial.println(Htime);
      // Serial.println(Ltime);
     
-  }
-
-  //if (micros() - dispIsrTimer > 300) {       // таймер динамической индикации (по-русски: КОСТЫЛЬ!)
-    //disp.timerIsr();                         // "пнуть" дисплей
-  //  dispIsrTimer = micros();                 // сбросить таймер
-  //}
-
-  
-}
-
-
-
-
-
-
-
-
 
 /*
-
-
 
 #include <Arduino.h>
 #include <AccelStepper.h>
@@ -463,8 +447,6 @@ const int stepPin1 = D5;
 
 AccelStepper Rstepper(1, stepPin, dirPin);
 AccelStepper Lstepper(1, stepPin1, dirPin1);
-
-
 
 void setup()
   {
@@ -479,8 +461,6 @@ void loop()
     Rstepper.runSpeed();
     Lstepper.runSpeed();
  }
-
-
 
 */
 
