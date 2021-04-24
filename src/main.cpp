@@ -5,10 +5,10 @@
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <IRremoteESP8266.h>
-//#include <IRsend.h>
+
 #include <AccelStepper.h>
 #include <Ultrasonic.h>
-
+#include <EEPROM.h>
 #include <IRrecv.h>
 #include <IRutils.h>
 #include <IRsend.h>
@@ -20,25 +20,42 @@
 
 
 
-const uint16_t kRecvPin = 4;
+const uint16_t kRecvPin = 0;
 
 IRrecv irrecv(kRecvPin);
 
 decode_results results;
 
-#define IR_LED 14  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
+#define IR_LED 4  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
 
 IRsend irsend(IR_LED);  // Set the GPIO to be used to sending the message.
+irparams_t filter;
+ 
+uint8_t sRepeats = 1;
+
+uint16_t IRMessageSamsung[71] = 
+{
+  9000, 4500, 650, 550, 650, 1650, 600, 550, 650, 550,
+  600, 1650, 650, 550, 600, 1650, 650, 1650, 650, 1650,
+  600, 550, 650, 1650, 650, 1650, 650, 550, 600, 1650,
+  650, 1650, 650, 550, 650, 550, 650, 1650, 650, 550,
+  650, 550, 650, 550, 600, 550, 650, 550, 650, 550,
+  650, 1650, 600, 550, 650, 1650, 650, 1650, 650, 1650,
+  650, 1650, 650, 1650, 650, 1650, 600
+};
 
 
-
-uint16_t Samsung_power_toggle[71] = {
-    38000, 1,  1,  170, 170, 20, 63, 20, 63, 20, 63,  20, 20, 20, 20,
-    20,    20, 20, 20,  20,  20, 20, 63, 20, 63, 20,  63, 20, 20, 20,
-    20,    20, 20, 20,  20,  20, 20, 20, 20, 20, 63,  20, 20, 20, 20,
-    20,    20, 20, 20,  20,  20, 20, 20, 20, 63, 20,  20, 20, 63, 20,
-    63,    20, 63, 20,  63,  20, 63, 20, 63, 20, 1798};
-
+int khz = 38;
+uint16_t irSignal1[67] = 
+{
+  9000, 4500, 650, 550, 650, 1650, 600, 550, 650, 550,
+  600, 1650, 650, 550, 600, 1650, 650, 1650, 650, 1650,
+  600, 550, 650, 1650, 650, 1650, 650, 550, 600, 1650,
+  650, 1650, 650, 550, 650, 550, 650, 1650, 650, 550,
+  650, 550, 650, 550, 600, 550, 650, 550, 650, 550,
+  650, 1650, 600, 550, 650, 1650, 650, 1650, 650, 1650,
+  650, 1650, 650, 1650, 650, 1650, 600
+};
 
 
 
@@ -48,13 +65,25 @@ const char *password = APPSK;
 
 Ultrasonic ultrasonic1(17, 16);
 
+
+uint16_t address = 0x10;
+uint16_t  command =  0x34; 
+
+
+
+
 float dist_3[3] = {0.0, 0.0, 0.0};   // массив для хранения трёх последних измерений
 float middle, dist, dist_filtered;
 float k;
 byte i, delta;
 unsigned long dispIsrTimer, sensTimer;
-unsigned long strob;
-float wall = 300.0;
+
+unsigned long randomizedReadingTime = 0;
+unsigned long strobTimer = 0;
+unsigned long recievingTimer;
+int recieveCounter = 0;
+int confirmedMessages = 0;
+
 
 
 int Htime;       // целочисленная переменная для хранения времени высокого логического уровня
@@ -79,14 +108,28 @@ IRsend irsend(SEND_PIN);
 unsigned long infraRedCode = 0xE0E1488F;
 
 */
-double speed = 2000;
-double lowSpeed = 1500;
+
+// Dynamic variables for EEPROM
+int itterationNumber = 0;
+int confirmedMessagesTrigger = 3;
+int recieveCounterTrigger = 10;
+int speed = 2000; //double
+int lowSpeed = 1500; //double
+int wall = 50; //float
+int recievingTimerFreqmS = 200; //unsigned long 200
+int strobTimerTrigger = 20; //unsigned long 100
+
+bool sended = false;
+
 int oneMove = 200;
+
+bool resumed = false;
 bool straight = false;
 bool moving = true;
-
+bool isServer = true;
 bool speedChanged = false;
 bool IRCheck = false;
+bool newEEPROMData = false;
 //AccelStepper Rstepper(1, stepPin, dirPin);
 //AccelStepper Lstepper(1, stepPin1, dirPin1);
 
@@ -104,16 +147,42 @@ const String HtmlIRStateHigh = "<big>ИК Светодиод <b>Отсутств
 const String HtmlIRStateLOW = "<big>Светодиод <b>Выключен</b></big><br/><br/>\n";
 const String HtmlButtons = 
 "<a href=\"Move\"><button style=\"background-color:blue;color:white;width:15%;height:10%;font-size:24px;\">&#8657;</button></a>"
-"<a href=\"Straight\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9650;</button></a><br/>"
-"<a href=\"Left\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9668;</button></a>"
-"<a href=\"Stop\"><button style=\"background-color:red;color:white;width:15%;height:10%;font-size:24px;\">&#8855;</button></a>"
-"<a href=\"Right\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9658;</button></a><br/>"
-"<a href=\"Reverse\"><button style=\"background-color:blue;color:white;width:15%;height:10%;font-size:24px;\">&#8659;</button></a>"
-"<a href=\"Back\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9660;</button></a><br/><br/><br/>"
-"<a href=\"Slower\"><button style=\"background-color:blue;color:white;width:22%;height:10%;font-size:24px;\">&#8722;</button></a>"
+//"<a href=\"Straight\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9650;</button></a><br/>"
+//"<a href=\"Left\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9668;</button></a>"
+//"<a href=\"Stop\"><button style=\"background-color:red;color:white;width:15%;height:10%;font-size:24px;\">&#8855;</button></a>"
+//"<a href=\"Right\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9658;</button></a><br/>"
+//"<a href=\"Reverse\"><button style=\"background-color:blue;color:white;width:15%;height:10%;font-size:24px;\">&#8659;</button></a>"
+//"<a href=\"Back\"><button style=\"background-color:green;color:black;width:15%;height:10%;font-size:24px;\">&#9660;</button></a><br/><br/><br/>"
+//"<a href=\"Slower\"><button style=\"background-color:blue;color:white;width:22%;height:10%;font-size:24px;\">&#8722;</button></a>"
 "<a href=\"Faster\"><button style=\"background-color:blue;color:white;width:22%;height:10%;font-size:24px;\">&#8853;</button></a><br/";
 
 const String HtmlHtmlClose = "</html>";
+
+
+void EEPROMSave()
+{
+  EEPROM.put(0, ++itterationNumber);
+  EEPROM.put(1, confirmedMessagesTrigger);
+  EEPROM.put(2, recieveCounterTrigger);
+  EEPROM.put(3, speed);
+  EEPROM.put(4, lowSpeed); 
+  EEPROM.put(5, wall);
+  EEPROM.put(6, confirmedMessagesTrigger);
+ 
+  EEPROM.commit();
+}
+
+void EEPROMRead()
+{
+  itterationNumber = EEPROM.read(0);
+  confirmedMessagesTrigger = EEPROM.read(1);
+  recieveCounterTrigger = EEPROM.read(2);
+  speed = EEPROM.read(3);
+  lowSpeed = EEPROM.read(4);
+  wall = EEPROM.read(5);
+  confirmedMessagesTrigger = EEPROM.read(6);
+}
+
 
 void response()
 {
@@ -318,6 +387,8 @@ void setup()
  irrecv.enableIRIn();
  irsend.begin();
 
+ address = random(1000);
+
 }
  
 void loop() 
@@ -327,20 +398,21 @@ void loop()
   //ledcWrite(0, 20);
 //}
     
-  if (!IRCheck)
-  {
-
-    ledcWrite(0, 20);
-    //Serial.println("Moving");
-  }
-  else if(dist_filtered<wall) 
+ if(IRCheck && dist_filtered<wall) 
   {
     ledcWrite(0, 0);
     //Serial.println("Stop");
 
   }
-/*
-  if ((dist_filtered < (wall+50)) && !speedChanged && IRCheck)
+  else
+    {
+
+    ledcWrite(0, 20);
+    //Serial.println("Moving");
+  }
+
+
+  if ((dist_filtered < (wall+100)) && !speedChanged && IRCheck)
   {
     ledcSetup(0, lowSpeed, 13);
     speedChanged = true;
@@ -348,16 +420,21 @@ void loop()
     
   }
   
-  else if (((dist_filtered > (wall+50)) && speedChanged) || !IRCheck)
+  else if (speedChanged)
   {
-    ledcSetup(0, speed, 13);
-    speedChanged = false;
-    //Serial.println("Normal Speed");
-  }
-   
-*/
+    if ((dist_filtered > (wall+50)) || !IRCheck)
+    {
+      ledcSetup(0, speed, 13);
+      speedChanged = false;
+      //Serial.println("Normal Speed");
+    }
+  } 
+  
 
-  if (millis() - sensTimer > 1000) 
+   
+
+
+  if (millis() - sensTimer > 100) 
   {                          // измерение и вывод каждые 50 мс
     // счётчик от 0 до 2
     // каждую итерацию таймера i последовательно принимает значения 0, 1, 2, и так по кругу
@@ -378,46 +455,117 @@ void loop()
     
     sensTimer = millis();                                   
 
-    Serial.print("Lenth: ");
-    Serial.println(dist_filtered);
+    //Serial.print("Lenth: ");
+    //Serial.println(dist_filtered);
 
 
     
 
+
+ 
+  }
+
+  // Sending IR code
+  if ((millis() - strobTimer > strobTimerTrigger) && !sended) 
+  //if((millis() - strobTimer > 20) && !sended) 
+  {
+     // irsend.sendGC(IRMessageSamsung, 71);
+
+
+
+
+      uint32_t dataToSend = irsend.encodeNEC(address, command);
+      irsend.sendNEC(dataToSend);
+
+        //--b;
+
+    //  Serial.println("Sending....");
+      //irsend.sendElitescreens(157,8,1);
+      //irsend.sendRaw(irSignal1,  67, 38); //Note the approach used to automatically calculate the size of the array.
+      //irsend.sendNEC(0x00FFE01FUL);
+     // strobTimer = millis();
+     sended = true;
+
+
+  }
+  if ((millis() - strobTimer > (strobTimerTrigger+20)) && !resumed) 
+  {
+      irrecv.resume(); 
+      resumed = true;
+
+      randomizedReadingTime = (strobTimerTrigger*40) + random(300);
+     // Serial.print("Gap = ");
+     // Serial.println(randomizedReadingTime); 
+  }
+  
+
+
+
+  //Recieve and processing IR codes
+  //if (millis() - recievingTimer > recievingTimerFreqmS) 
+  if ((millis() - strobTimer) > randomizedReadingTime) 
+  {
+    sRepeats++;
+    ++recieveCounter;
+
+   // if (irrecv.decode(&results, nullptr, 5)) 
     if (irrecv.decode(&results)) 
     {
-    
-      serialPrintUint64(results.value);
-      if(results.value ==  3772793023) 
+
+      if(results.address != 0) 
+      
       {
         Serial.println("IR OK");
-        IRCheck = true;
-        results.value = 0;
+        Serial.println(results.address, HEX);
+
+        //IRCheck = true;
+        ++confirmedMessages;
+        //results.value = 0;
       }
       else 
       {
-        IRCheck = false;
-        Serial.println("IR NO");
-        results.value = 0;
-      
+        //IRCheck = false;
+        Serial.println("Another code   :   ");
+        Serial.println(results.address, HEX);
+
+        //--b;
+        //results.value = 0;
+
       }
           
-      irrecv.resume(); 
+      //irrecv.resume(); 
     }
     else 
     {
-      IRCheck = false;
-      Serial.println("IR NO");
+      //IRCheck = false;
+      //--b;
+      Serial.println("Nothing");
     
     }
 
+    if(recieveCounter>=recieveCounterTrigger)
+    {
+      recieveCounter=0;
+      Serial.print("confirmedMessages: ");
+      Serial.println(confirmedMessages);
+      if (confirmedMessages>confirmedMessagesTrigger) 
+      {
+        IRCheck = true;
+        Serial.println("IRCheck = true;");
+      }
+      else
+      {
+        IRCheck = false;
+        Serial.println("IRCheck = false;");  
+      }
+
+      confirmedMessages = 0;
+    }
     irrecv.resume(); 
- 
-  }
-  if (millis() - strob > 2000) 
-  {
-      irsend.sendGC(Samsung_power_toggle, 71);
-      strob = millis();
+   // recievingTimer = millis();
+   strobTimer = millis();
+   sended = false;
+   resumed = false;
   }
 
 
