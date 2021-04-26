@@ -115,7 +115,7 @@ int confirmedMessagesTrigger = 3;
 int recieveCounterTrigger = 10;
 int speed = 2000; //double
 int lowSpeed = 1500; //double
-int wall = 50; //float
+int wall = 300; //float
 int recievingTimerFreqmS = 200; //unsigned long 200
 int strobTimerTrigger = 20; //unsigned long 100
 
@@ -398,44 +398,53 @@ void loop()
   //ledcWrite(0, 20);
 //}
     
- if(IRCheck && dist_filtered<wall) 
+ if(!IRCheck) 
   {
-    ledcWrite(0, 0);
+    ledcWrite(0, 20);
     //Serial.println("Stop");
+    if(speedChanged) 
+    {
+      ledcSetup(0, speed, 13);
+      speedChanged = false;
+    }
 
   }
-  else
-    {
-
-    ledcWrite(0, 20);
+  
+  else if (dist_filtered<wall)
+  {
+    ledcWrite(0, 0);
+    
     //Serial.println("Moving");
   }
 
 
-  if ((dist_filtered < (wall+100)) && !speedChanged && IRCheck)
+  else if ((dist_filtered < (wall+100)) && !speedChanged)
   {
     ledcSetup(0, lowSpeed, 13);
     speedChanged = true;
     Serial.print("Low Speed");
-    
+    ledcWrite(0, 20);
   }
   
-  else if (speedChanged)
+  
+  else if ((dist_filtered > (wall+100)) && speedChanged)
   {
-    if ((dist_filtered > (wall+50)) || !IRCheck)
-    {
+
       ledcSetup(0, speed, 13);
       speedChanged = false;
       //Serial.println("Normal Speed");
-    }
+      ledcWrite(0, 20);
   } 
   
-
+  else
+  {
+    ledcWrite(0, 20);
+  }
    
 
 
 
-  if (millis() - sensTimer > 100) 
+  if (millis() - sensTimer > 500) 
   {                          // измерение и вывод каждые 50 мс
     // счётчик от 0 до 2
     // каждую итерацию таймера i последовательно принимает значения 0, 1, 2, и так по кругу
@@ -456,8 +465,8 @@ void loop()
     
     sensTimer = millis();                                   
 
-    //Serial.print("Lenth: ");
-    //Serial.println(dist_filtered);
+    Serial.print("Lenth: ");
+    Serial.println(dist_filtered);
 
 
     
