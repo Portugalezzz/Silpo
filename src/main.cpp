@@ -115,7 +115,7 @@ int confirmedMessagesTrigger = 3;
 int recieveCounterTrigger = 10;
 int speed = 2000; //double
 int lowSpeed = 1500; //double
-int wall = 300; //float
+int wall = 200; //float
 int recievingTimerFreqmS = 200; //unsigned long 200
 int strobTimerTrigger = 20; //unsigned long 100
 
@@ -128,7 +128,7 @@ bool straight = false;
 bool moving = true;
 bool isServer = true;
 bool speedChanged = false;
-bool IRCheck = false;
+bool IRCheck = true;
 bool newEEPROMData = false;
 //AccelStepper Rstepper(1, stepPin, dirPin);
 //AccelStepper Lstepper(1, stepPin1, dirPin1);
@@ -346,7 +346,8 @@ float middle_of_3(float a, float b, float c) {
  
 void setup() 
 {
-  delay(1000); 
+  delay(2000); 
+  /*
   WiFi.softAP(ssid, password); 
   IPAddress apip = WiFi.softAPIP();     
   server.on("/", response); 
@@ -362,9 +363,9 @@ void setup()
   server.on("/Reverse", handleReverse); 
   server.on("/Faster", handleFaster); 
   server.on("/Slower", handleSlower); 
-
+*/
   Serial.begin(9600);
-  server.begin();    
+  //server.begin();    
   pinMode(LED, OUTPUT);
   digitalWrite(LED, statusLED);
 
