@@ -74,9 +74,18 @@ uint16_t  command =  0x34;
 
 float dist_3[3] = {0.0, 0.0, 0.0};   // массив для хранения трёх последних измерений
 float middle, dist, dist_filtered;
+float USWall = 30;
+unsigned long USWallTimer = 0;
+bool obstacle = false;
+bool stopped = true;
+//bool Moved;
+
+
 float k;
 byte i, delta;
 unsigned long dispIsrTimer, sensTimer;
+
+
 
 unsigned long randomizedReadingTime = 0;
 unsigned long strobTimer = 0;
@@ -398,7 +407,7 @@ void loop()
   // Serial.println(straight);
   //ledcWrite(0, 20);
 //}
-    
+ /*   
  if(!IRCheck) 
   {
     ledcWrite(0, 20);
@@ -442,7 +451,7 @@ void loop()
     ledcWrite(0, 20);
   }
    
-
+*/
 
 
   if (millis() - sensTimer > 500) 
@@ -475,7 +484,7 @@ void loop()
 
  
   }
-
+/*
   // Sending IR code
   if ((millis() - strobTimer > strobTimerTrigger) && !sended) 
   //if((millis() - strobTimer > 20) && !sended) 
@@ -508,9 +517,9 @@ void loop()
      // Serial.print("Gap = ");
      // Serial.println(randomizedReadingTime); 
   }
-  
+  */
 
-
+/*
 
   //Recieve and processing IR codes
   //if (millis() - recievingTimer > recievingTimerFreqmS) 
@@ -579,7 +588,47 @@ void loop()
    resumed = false;
   }
 
+*/
 
+  if (dist_filtered < USWall)
+  {
+    
+    if (!obstacle)
+    {
+      USWallTimer = millis();
+      obstacle = true;
+      Serial.println("Start timer");
+    }
+
+    
+  }
+
+  else
+  {
+    //Serial.println("!!!!!");
+    obstacle = false;
+    if(stopped) 
+    {
+      ledcWrite(0, 20);
+      Serial.println("Moved");
+      stopped = false;
+    }
+
+  }
+
+
+  if (((millis() - USWallTimer)>1300) && obstacle)
+  {
+    if(!stopped)
+    {
+      ledcWrite(0, 0);
+      stopped = true;
+      Serial.println("Stopped");
+    }
+
+  }
+
+  
 }
 
 /*
